@@ -1,6 +1,6 @@
 {
   "name": "@masculinecache/warp-axi",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Agent-ergonomic Cloudflare WARP CLI wrapper with TOON output — status, registration, connectivity, split tunnels, and debug diagnostics via warp-cli",
   "type": "module",
   "bin": {
