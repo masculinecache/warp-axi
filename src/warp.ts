@@ -92,6 +92,28 @@ export async function callWarpLenient(
   return runner.run(args, options);
 }
 
+export async function callWarpJson(
+  runner: WarpRunner,
+  args: string[],
+  options?: { input?: string }
+): Promise<WarpResult> {
+  return runner.run(["-j", ...args], options);
+}
+
+export async function callWarpJsonLenient(
+  runner: WarpRunner,
+  args: string[],
+  options?: { input?: string }
+): Promise<WarpResult> {
+  const result = await runner.run(["-j", ...args], options);
+  try {
+    JSON.parse(result.stdout);
+  } catch {
+    return result;
+  }
+  return result;
+}
+
 interface ErrorPattern {
   pattern: RegExp;
   code: string;

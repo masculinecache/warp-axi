@@ -1,43 +1,37 @@
 import { type CommandArea, type CommandContext } from "../cli.js";
-import { callWarp, callWarpLenient } from "../warp.js";
-import { takeBoolFlag } from "../args.js";
+import { callWarpJsonLenient } from "../warp.js";
 import { wantsHelp, validateFlags } from "../util.js";
-import { renderDetail, renderList, renderHelp, field, custom, type Schema } from "../toon.js";
+import { renderDetail, renderHelp, field, custom, type Schema } from "../toon.js";
 
 const SETTINGS_SCHEMA: Schema = {
-  mode: field("mode"),
-  excludeRoutes: custom((item: Record<string, unknown>) => {
-    const exclude = item.exclude_routes ?? item.exclude;
-    if (Array.isArray(exclude)) return exclude.join(", ");
-    return exclude ? String(exclude) : undefined;
+  mode: custom((item: Record<string, unknown>) => {
+    const settings = item.settings as Record<string, unknown> | undefined;
+    return settings?.operation_mode ? String(settings.operation_mode) : undefined;
   }),
-  includeRoutes: custom((item: Record<string, unknown>) => {
-    const include = item.include_routes ?? item.include;
-    if (Array.isArray(include)) return include.join(", ");
-    return include ? String(include) : undefined;
+  splitTunnelMode: custom((item: Record<string, unknown>) => {
+    const settings = item.settings as Record<string, unknown> | undefined;
+    return settings?.split_tunnel_mode ? String(settings.split_tunnel_mode) : undefined;
   }),
-  dns: field("dns"),
-  proxy: field("proxy"),
+  alwaysOn: custom((item: Record<string, unknown>) => {
+    const settings = item.settings as Record<string, unknown> | undefined;
+    return settings?.always_on != null ? String(settings.always_on) : undefined;
+  }),
+  autoConnect: custom((item: Record<string, unknown>) => {
+    const settings = item.settings as Record<string, unknown> | undefined;
+    return settings?.auto_connect_after_min != null ? String(settings.auto_connect_after_min) + " min" : undefined;
+  }),
+  dohHostname: custom((item: Record<string, unknown>) => {
+    const settings = item.settings as Record<string, unknown> | undefined;
+    return settings?.doh_hostname ? String(settings.doh_hostname) : undefined;
+  }),
 };
 
-function parseSettingsJson(text: string): Record<string, unknown> {
+function parseJson(text: string): Record<string, unknown> {
   try {
     return JSON.parse(text);
   } catch {
-    return parseSettingsText(text);
+    return {};
   }
-}
-
-function parseSettingsText(text: string): Record<string, unknown> {
-  const result: Record<string, unknown> = {};
-  for (const line of text.split("\n")) {
-    const m = line.match(/^\s*(.+?):\s+(.+)$/);
-    if (m) {
-      const key = m[1].trim().toLowerCase().replace(/\s+/g, "_");
-      result[key] = m[2].trim();
-    }
-  }
-  return result;
 }
 
 export const settingsArea: CommandArea = {
@@ -45,24 +39,16 @@ export const settingsArea: CommandArea = {
   aliases: ["config"],
   description: "Show WARP client settings and configuration",
   help: [
-    "usage: warp-axi settings [--json]",
+    "usage: warp-axi settings",
     "",
     "Show current WARP client settings.",
-    "",
-    "Flags:",
-    "  --json    Use warp-cli --json for structured output",
   ],
   async run(ctx: CommandContext, args: string[]): Promise<{ stdout: string; exitCode: number }> {
     if (wantsHelp(args)) return { stdout: renderHelp(this.help), exitCode: 0 };
+    validateFlags(args, [], "settings");
 
-    const useJson = takeBoolFlag(args, "--json");
-    validateFlags(args, ["--json"], "settings");
-
-    const warpArgs = ["settings"];
-    if (useJson) warpArgs.push("--json");
-
-    const result = await callWarpLenient(ctx.runner, warpArgs);
-    const parsed = useJson ? parseSettingsJson(result.stdout) : parseSettingsText(result.stdout);
+    const result = await callWarpJsonLenient(ctx.runner, ["settings", "list"]);
+    const parsed = parseJson(result.stdout);
 
     return { stdout: renderDetail("settings", parsed, SETTINGS_SCHEMA), exitCode: 0 };
   },

@@ -1,22 +1,27 @@
 import { type CommandArea, type CommandContext } from "../cli.js";
-import { callWarp, callWarpLenient } from "../warp.js";
+import { callWarp, callWarpJsonLenient } from "../warp.js";
 import { takeFlag, takeBoolFlag } from "../args.js";
 import { wantsHelp, validateFlags } from "../util.js";
-import { renderDetail, renderList, renderHelp, renderError, renderOutput } from "../toon.js";
-import { field, boolYesNo, custom, type Schema } from "../toon.js";
+import { renderDetail, renderHelp, renderError, renderOutput, field, custom, type Schema } from "../toon.js";
 
 const REG_SCHEMA: Schema = {
   organization: custom((item: Record<string, unknown>) => {
-    const org = item.organization;
-    return org ? String(org) : "(none)";
+    const acct = item.account as Record<string, unknown> | undefined;
+    return acct?.organization ? String(acct.organization) : "(none)";
   }),
-  enrollmentType: field("type"),
-  deviceUid: field("uid"),
-  accountId: field("account_id"),
-  enabled: field("enabled"),
+  accountType: custom((item: Record<string, unknown>) => {
+    const acct = item.account as Record<string, unknown> | undefined;
+    return acct?.type ? String(acct.type) : undefined;
+  }),
+  managed: field("managed"),
+  deviceId: field("device_id"),
+  accountId: custom((item: Record<string, unknown>) => {
+    const acct = item.account as Record<string, unknown> | undefined;
+    return acct?.id ? String(acct.id) : undefined;
+  }),
 };
 
-function parseRegJson(text: string): Record<string, unknown> {
+function parseJson(text: string): Record<string, unknown> {
   try {
     return JSON.parse(text);
   } catch {
@@ -39,7 +44,6 @@ export const registrationArea: CommandArea = {
     "new flags:",
     "  --org <name>     Organization name (required)",
     "  --token <token>  MDM service token for headless enrollment",
-    "  --json           Use structured output",
   ],
   async run(ctx: CommandContext, args: string[]): Promise<{ stdout: string; exitCode: number }> {
     if (wantsHelp(args)) return { stdout: renderHelp(this.help), exitCode: 0 };
@@ -60,15 +64,11 @@ export const registrationArea: CommandArea = {
 
 async function regShow(
   ctx: CommandContext,
-  args: string[]
+  _args: string[]
 ): Promise<{ stdout: string; exitCode: number }> {
-  const useJson = takeBoolFlag(args, "--json");
-  validateFlags(args, ["--json"], "registration show");
+  validateFlags(_args, [], "registration show");
 
-  const warpArgs = ["registration", "show"];
-  if (useJson) warpArgs.push("--json");
-
-  const result = await callWarpLenient(ctx.runner, warpArgs);
+  const result = await callWarpJsonLenient(ctx.runner, ["registration", "show"]);
   if (result.exitCode !== 0 && !result.stdout) {
     return {
       stdout: renderDetail("registration", { status: "not registered" }, REG_SCHEMA),
@@ -76,7 +76,7 @@ async function regShow(
     };
   }
 
-  const parsed = useJson ? parseRegJson(result.stdout) : parseRegText(result.stdout);
+  const parsed = parseJson(result.stdout);
   return { stdout: renderDetail("registration", parsed, REG_SCHEMA), exitCode: 0 };
 }
 
@@ -86,8 +86,7 @@ async function regNew(
 ): Promise<{ stdout: string; exitCode: number }> {
   const org = takeFlag(args, "org");
   const token = takeFlag(args, "token");
-  const useJson = takeBoolFlag(args, "--json");
-  validateFlags(args, ["--org", "--token", "--json"], "registration new");
+  validateFlags(args, ["--org", "--token"], "registration new");
 
   if (!org) {
     return {
@@ -104,30 +103,16 @@ async function regNew(
     warpArgs.push("--service-token", token);
   }
 
-  const result = await callWarp(ctx.runner, warpArgs);
+  await callWarp(ctx.runner, warpArgs);
   return { stdout: renderDetail("registration", { status: "registered", organization: org }, REG_SCHEMA), exitCode: 0 };
 }
 
 async function regDelete(
   ctx: CommandContext,
-  args: string[]
+  _args: string[]
 ): Promise<{ stdout: string; exitCode: number }> {
-  const useJson = takeBoolFlag(args, "--json");
-  validateFlags(args, ["--json"], "registration delete");
+  validateFlags(_args, [], "registration delete");
 
-  const warpArgs = ["registration", "delete"];
-  await callWarp(ctx.runner, warpArgs);
+  await callWarp(ctx.runner, ["registration", "delete"]);
   return { stdout: renderDetail("registration", { status: "deleted" }, REG_SCHEMA), exitCode: 0 };
-}
-
-function parseRegText(text: string): Record<string, unknown> {
-  const result: Record<string, unknown> = {};
-  for (const line of text.split("\n")) {
-    const m = line.match(/^\s*(.+?):\s+(.+)$/);
-    if (m) {
-      const key = m[1].trim().toLowerCase().replace(/\s+/g, "_");
-      result[key] = m[2].trim();
-    }
-  }
-  return result;
 }

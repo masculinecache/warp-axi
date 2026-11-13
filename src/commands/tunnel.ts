@@ -1,50 +1,38 @@
 import { type CommandArea, type CommandContext } from "../cli.js";
-import { callWarp, callWarpLenient } from "../warp.js";
-import { takeBoolFlag } from "../args.js";
+import { callWarp, callWarpJsonLenient } from "../warp.js";
 import { wantsHelp, validateFlags } from "../util.js";
-import { renderDetail, renderList, renderHelp, renderOutput, field, custom, type Schema } from "../toon.js";
+import { renderDetail, renderHelp, renderOutput, field, custom, type Schema } from "../toon.js";
 import { renderListBlock } from "../list.js";
 
 const TUNNEL_SCHEMA: Schema = {
   cidr: custom((item: Record<string, unknown>) => {
-    const cidr = item.cidr ?? item.address;
+    if (typeof item === "string") return item;
+    const cidr = item.cidr ?? item.address ?? item.value;
     return cidr ? String(cidr) : String(item.route ?? "unknown");
   }),
   description: field("description"),
-  type: field("type"),
-  via: field("via"),
 };
 
 const STATS_SCHEMA: Schema = {
   rx: field("rx"),
   tx: field("tx"),
-};
-
-const RAW_SCHEMA: Schema = {
-  raw: field("raw"),
+  v4Endpoint: field("v4_endpoint"),
+  v6Endpoint: field("v6_endpoint"),
 };
 
 function parseTunnelDump(text: string): Record<string, unknown>[] {
   try {
     const data = JSON.parse(text);
-    if (Array.isArray(data)) return data;
+    if (Array.isArray(data)) {
+      return data.map((item: unknown) => {
+        if (typeof item === "string") return { cidr: item, description: "" };
+        return item as Record<string, unknown>;
+      });
+    }
     if (data.routes) return data.routes;
-    if (data.tunnels) return data.tunnels;
     return [data];
   } catch {
-    const items: Record<string, unknown>[] = [];
-    let current: Record<string, unknown> = {};
-    for (const line of text.split("\n")) {
-      const m = line.match(/^\s*(.+?):\s+(.+)$/);
-      if (m) {
-        current[m[1].trim().toLowerCase().replace(/\s+/g, "_")] = m[2].trim();
-      } else if (line.trim() === "" && Object.keys(current).length > 0) {
-        items.push(current);
-        current = {};
-      }
-    }
-    if (Object.keys(current).length > 0) items.push(current);
-    return items;
+    return [];
   }
 }
 
@@ -53,14 +41,11 @@ export const tunnelArea: CommandArea = {
   aliases: ["split-tunnel", "routes"],
   description: "Show split tunnel configuration and routes",
   help: [
-    "usage: warp-axi tunnel <subcommand> [options]",
+    "usage: warp-axi tunnel <subcommand>",
     "",
     "Subcommands:",
     "  dump        List all split tunnel routes",
     "  stats       Show tunnel traffic statistics",
-    "",
-    "Flags:",
-    "  --json      Use warp-cli --json for structured output",
   ],
   async run(ctx: CommandContext, args: string[]): Promise<{ stdout: string; exitCode: number }> {
     if (wantsHelp(args)) return { stdout: renderHelp(this.help), exitCode: 0 };
@@ -81,13 +66,9 @@ async function tunnelDump(
   ctx: CommandContext,
   args: string[],
 ): Promise<{ stdout: string; exitCode: number }> {
-  const useJson = takeBoolFlag(args, "--json");
-  validateFlags(args, ["--json"], "tunnel dump");
+  validateFlags(args, [], "tunnel dump");
 
-  const warpArgs = ["tunnel", "dump"];
-  if (useJson) warpArgs.push("--json");
-
-  const result = await callWarpLenient(ctx.runner, warpArgs);
+  const result = await callWarpJsonLenient(ctx.runner, ["tunnel", "dump"]);
   const items = parseTunnelDump(result.stdout);
 
   return {
@@ -96,7 +77,6 @@ async function tunnelDump(
       items,
       schema: TUNNEL_SCHEMA,
       empty: "routes: no split tunnel routes configured",
-      truncatedHint: "Run `warp-axi tunnel dump --json` for the full set",
     }),
     exitCode: 0,
   };
@@ -106,17 +86,13 @@ async function tunnelStats(
   ctx: CommandContext,
   args: string[],
 ): Promise<{ stdout: string; exitCode: number }> {
-  const useJson = takeBoolFlag(args, "--json");
-  validateFlags(args, ["--json"], "tunnel stats");
+  validateFlags(args, [], "tunnel stats");
 
-  const warpArgs = ["tunnel", "stats"];
-  if (useJson) warpArgs.push("--json");
-
-  const result = await callWarp(ctx.runner, warpArgs);
+  const result = await callWarpJsonLenient(ctx.runner, ["tunnel", "stats"]);
   try {
     const data = JSON.parse(result.stdout);
     return { stdout: renderDetail("stats", data, STATS_SCHEMA), exitCode: 0 };
   } catch {
-    return { stdout: renderDetail("stats", { raw: result.stdout }, RAW_SCHEMA), exitCode: 0 };
+    return { stdout: result.stdout, exitCode: 0 };
   }
 }

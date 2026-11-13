@@ -1,41 +1,45 @@
 import { type CommandArea, type CommandContext } from "../cli.js";
-import { callWarp, callWarpLenient, type WarpResult } from "../warp.js";
-import { takeFlag, takeBoolFlag } from "../args.js";
+import { callWarpJsonLenient } from "../warp.js";
+import { takeBoolFlag } from "../args.js";
 import { wantsHelp, validateFlags } from "../util.js";
-import { renderDetail, renderHelp, renderError, renderOutput, field, boolYesNo, custom, mapEnum, type Schema } from "../toon.js";
+import { renderDetail, renderHelp, renderOutput, field, custom, type Schema } from "../toon.js";
 
 const STATUS_SCHEMA: Schema = {
   status: field("status"),
-  registration: custom((item: Record<string, unknown>) => {
-    const raw = item.registration as Record<string, unknown> | undefined;
-    return raw ? "registered" : "unregistered";
+  reason: field("reason"),
+  managed: field("managed"),
+  organization: custom((item: Record<string, unknown>) => {
+    const acct = item.account as Record<string, unknown> | undefined;
+    return acct?.organization ? String(acct.organization) : undefined;
   }),
-  accountId: field("account_id"),
+  accountType: custom((item: Record<string, unknown>) => {
+    const acct = item.account as Record<string, unknown> | undefined;
+    return acct?.type ? String(acct.type) : undefined;
+  }),
 };
 
 const STATUS_DETAIL_SCHEMA: Schema = {
   status: field("status"),
+  reason: field("reason"),
+  id: field("id"),
+  deviceId: field("device_id"),
+  managed: field("managed"),
+  accountType: custom((item: Record<string, unknown>) => {
+    const acct = item.account as Record<string, unknown> | undefined;
+    return acct?.type ? String(acct.type) : undefined;
+  }),
   organization: custom((item: Record<string, unknown>) => {
-    const raw = item.registration as Record<string, unknown> | undefined;
-    if (!raw) return "unregistered";
-    return raw.organization ? String(raw.organization) : "registered";
+    const acct = item.account as Record<string, unknown> | undefined;
+    return acct?.organization ? String(acct.organization) : undefined;
   }),
-  accountId: field("account_id"),
-  enrollmentType: custom((item: Record<string, unknown>) => {
-    const raw = item.registration as Record<string, unknown> | undefined;
-    if (!raw) return undefined;
-    return raw.type ? String(raw.type) : undefined;
+  accountId: custom((item: Record<string, unknown>) => {
+    const acct = item.account as Record<string, unknown> | undefined;
+    return acct?.id ? String(acct.id) : undefined;
   }),
-  deviceUid: custom((item: Record<string, unknown>) => {
-    const raw = item.registration as Record<string, unknown> | undefined;
-    if (!raw) return undefined;
-    return raw.uid ? String(raw.uid) : undefined;
-  }),
-  protocol: field("protocol"),
-  vnet: field("vnet"),
+  publicKey: field("public_key"),
 };
 
-function parseStatusJson(text: string): Record<string, unknown> {
+function parseJson(text: string): Record<string, unknown> {
   try {
     return JSON.parse(text);
   } catch {
@@ -63,31 +67,37 @@ export const statusArea: CommandArea = {
   aliases: ["info"],
   description: "Show WARP connection status and registration info",
   help: [
-    "usage: warp-axi status [--json] [--detail]",
+    "usage: warp-axi status [--detail]",
     "",
     "Show current WARP connection status.",
+    "Always uses warp-cli -j for structured JSON parsing.",
     "",
     "Flags:",
-    "  --json    Use warp-cli --json for structured output",
-    "  --detail  Show full registration details (org, device UID, protocol)",
+    "  --detail  Show full registration details (org, device ID, public key)",
   ],
   async run(ctx: CommandContext, args: string[]): Promise<{ stdout: string; exitCode: number }> {
     if (wantsHelp(args)) return { stdout: renderHelp(this.help), exitCode: 0 };
 
-    const useJson = takeBoolFlag(args, "--json");
     const detail = takeBoolFlag(args, "--detail");
-    validateFlags(args, ["--json", "--detail"], "status");
+    validateFlags(args, ["--detail"], "status");
 
-    const warpArgs = ["status"];
-    if (useJson) warpArgs.push("--json");
+    const statusResult = await callWarpJsonLenient(ctx.runner, ["status"]);
+    const regResult = await callWarpJsonLenient(ctx.runner, ["registration", "show"]);
 
-    const result = await callWarpLenient(ctx.runner, warpArgs);
-    const parsed = useJson
-      ? parseStatusJson(result.stdout)
-      : parseStatusText(result.stdout);
+    const statusParsed = parseJson(statusResult.stdout);
+    const regParsed = parseJson(regResult.stdout);
 
-    const schema = detail ? STATUS_DETAIL_SCHEMA : STATUS_SCHEMA;
-    const output = renderDetail("status", parsed, schema);
+    const merged = { ...statusParsed, ...regParsed };
+
+    if (!detail) {
+      const textParsed = parseStatusText(statusResult.stdout);
+      const base = statusParsed.status ? statusParsed : textParsed;
+      const combined = { ...base, ...regParsed };
+      const output = renderDetail("status", combined, STATUS_SCHEMA);
+      return { stdout: output, exitCode: 0 };
+    }
+
+    const output = renderDetail("status", merged, STATUS_DETAIL_SCHEMA);
     return { stdout: output, exitCode: 0 };
   },
 };

@@ -14,6 +14,26 @@ function makeRunner(routes: Record<string, WarpResult>): WarpRunner {
   };
 }
 
+const STATUS_JSON = JSON.stringify({ status: "Connected", reason: "NetworkHealthy" });
+const REG_JSON = JSON.stringify({
+  id: "01a1d59b-31e2-1406-858f-be6abbbb898f",
+  device_id: "01a1d59b-31e2-1406-858f-be6abbbb898f",
+  public_key: "testkey",
+  managed: true,
+  account: { type: "team", id: "a7fa198dd5b359a187c671064fe6b36e", organization: "testorg" },
+  alternate_networks: [],
+});
+const SETTINGS_JSON = JSON.stringify({
+  settings: {
+    always_on: true,
+    switch_locked: false,
+    auto_connect_after_min: 1,
+    operation_mode: "warp+doh",
+    split_tunnel_mode: "exclude",
+    doh_hostname: "test.cloudflare-gateway.com",
+  },
+});
+
 describe("warp-axi CLI", () => {
   describe("top-level", () => {
     it("shows help with no args", async () => {
@@ -47,44 +67,24 @@ describe("warp-axi CLI", () => {
   describe("status", () => {
     it("shows connection status", async () => {
       const runner = makeRunner({
-        "status": {
-          stdout: "Status: Connected\nAccount: test@org.com",
-          stderr: "",
-          exitCode: 0,
-        },
+        "-j status": { stdout: STATUS_JSON, stderr: "", exitCode: 0 },
+        "-j registration show": { stdout: REG_JSON, stderr: "", exitCode: 0 },
       });
       const { stdout, exitCode } = await run(["status"], runner);
       expect(exitCode).toBe(0);
       expect(stdout).toContain("Connected");
+      expect(stdout).toContain("testorg");
     });
 
     it("shows detail with --detail", async () => {
       const runner = makeRunner({
-        "status": {
-          stdout: JSON.stringify({
-            status: "Connected",
-            registration: { organization: "testorg", type: "team", uid: "abc" },
-          }),
-          stderr: "",
-          exitCode: 0,
-        },
+        "-j status": { stdout: STATUS_JSON, stderr: "", exitCode: 0 },
+        "-j registration show": { stdout: REG_JSON, stderr: "", exitCode: 0 },
       });
       const { stdout, exitCode } = await run(["status", "--detail"], runner);
       expect(exitCode).toBe(0);
       expect(stdout).toContain("Connected");
-    });
-
-    it("passes --json through", async () => {
-      const runner = makeRunner({
-        "status": {
-          stdout: JSON.stringify({ status: "Connected" }),
-          stderr: "",
-          exitCode: 0,
-        },
-      });
-      const { stdout, exitCode } = await run(["status", "--json"], runner);
-      expect(exitCode).toBe(0);
-      expect(stdout).toContain("Connected");
+      expect(stdout).toContain("testorg");
     });
   });
 
@@ -109,11 +109,7 @@ describe("warp-axi CLI", () => {
   describe("registration", () => {
     it("shows registration", async () => {
       const runner = makeRunner({
-        "registration show": {
-          stdout: "Organization: testorg\nType: team",
-          stderr: "",
-          exitCode: 0,
-        },
+        "-j registration show": { stdout: REG_JSON, stderr: "", exitCode: 0 },
       });
       const { stdout, exitCode } = await run(["registration", "show"], runner);
       expect(exitCode).toBe(0);
@@ -131,11 +127,8 @@ describe("warp-axi CLI", () => {
   describe("tunnel", () => {
     it("dumps split tunnel routes", async () => {
       const runner = makeRunner({
-        "tunnel dump": {
-          stdout: JSON.stringify([
-            { cidr: "10.0.0.0/8", description: "RFC1918", type: "exclude" },
-            { cidr: "172.16.0.0/12", description: "RFC1918", type: "exclude" },
-          ]),
+        "-j tunnel dump": {
+          stdout: JSON.stringify(["10.0.0.0/8", "172.16.0.0/12"]),
           stderr: "",
           exitCode: 0,
         },
@@ -147,7 +140,7 @@ describe("warp-axi CLI", () => {
 
     it("shows tunnel stats", async () => {
       const runner = makeRunner({
-        "tunnel stats": {
+        "-j tunnel stats": {
           stdout: JSON.stringify({ rx: "1.2 GB", tx: "3.4 GB" }),
           stderr: "",
           exitCode: 0,
@@ -161,7 +154,7 @@ describe("warp-axi CLI", () => {
   describe("settings", () => {
     it("shows client settings", async () => {
       const runner = makeRunner({
-        "settings": { stdout: "Mode: Warp\nDNS: 1.1.1.1", stderr: "", exitCode: 0 },
+        "-j settings list": { stdout: SETTINGS_JSON, stderr: "", exitCode: 0 },
       });
       const { stdout, exitCode } = await run(["settings"], runner);
       expect(exitCode).toBe(0);
