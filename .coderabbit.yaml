@@ -1,0 +1,7 @@
+language: en-US
+path_filters:
+  - "!node_modules/**"
+  - "!package-lock.json"
+  - "!dist/**"
+review:
+  profile: assertive

@@ -1,0 +1,7 @@
+agent: opencode
+auto_fix:
+  rebase: true
+  lint: true
+  test: true
+  document: false
+  ci: true

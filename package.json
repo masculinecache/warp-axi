@@ -1,0 +1,56 @@
+{
+  "name": "@masculinecache/warp-axi",
+  "version": "0.1.0",
+  "description": "Agent-ergonomic Cloudflare WARP CLI wrapper with TOON output — status, registration, connectivity, split tunnels, and debug diagnostics via warp-cli",
+  "type": "module",
+  "bin": {
+    "warp-axi": "dist/bin/warp-axi.js"
+  },
+  "files": [
+    "dist",
+    "!dist/test",
+    "skills/warp-axi",
+    "LICENSE",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run --config vitest.config.mts",
+    "test:watch": "vitest",
+    "dev": "tsx bin/warp-axi.ts",
+    "prepublishOnly": "npm run build"
+  },
+  "dependencies": {
+    "@toon-format/toon": "^4.1.1",
+    "axi-sdk-js": "^0.1.10"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.6",
+    "tsx": "^4.0.0",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.1"
+  },
+  "keywords": [
+    "cloudflare",
+    "warp",
+    "warp-cli",
+    "axi",
+    "toon",
+    "agent-ergonomic",
+    "zero-trust",
+    "mesh"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/masculinecache/warp-axi.git"
+  },
+  "homepage": "https://github.com/masculinecache/warp-axi#readme"
+}
